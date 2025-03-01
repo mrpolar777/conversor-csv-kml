@@ -2,40 +2,47 @@ import pandas as pd
 import streamlit as st
 import simplekml
 
-# Função para corrigir o formato das coordenadas
-def corrigir_coordenada(coord):
-    # Remove pontos extras e substitui a vírgula por ponto
-    coord = str(coord).replace(".", "").replace(",", ".")
-    return float(coord)
-
-# Função para converter coordenadas no formato personalizado para decimal
-def converter_coordenada(coord):
-    # Remove pontos extras
-    coord = str(coord).replace(".", "")
-    # Converte para float
-    return float(coord) / 1000000  # Ajuste conforme necessário
-
-# Função para extrair coordenadas do CSV
+# Função para extrair coordenadas do CSV sem modificar os valores
 def extract_coordinates_from_csv(csv_file):
-    df = pd.read_csv(csv_file)
+    try:
+        # Detectar delimitador correto
+        df = pd.read_csv(csv_file, encoding="utf-8", delimiter=";", on_bad_lines="skip")
+
+        if df.shape[1] == 1:
+            df = pd.read_csv(csv_file, encoding="utf-8", delimiter=",", on_bad_lines="skip")
+        if df.shape[1] == 1:
+            df = pd.read_csv(csv_file, encoding="utf-8", delimiter="\t", on_bad_lines="skip")
+
+    except Exception as e:
+        st.error(f"Erro ao ler o CSV: {e}")
+        return []
+
+    st.write("Colunas encontradas:", df.columns.tolist())  # Exibe as colunas para debug
+
     coordinates = []
     
-    # Verifica se as colunas de latitude e longitude existem
-    if 'Latitude' in df.columns and 'Longitude' in df.columns:
+    # Verifica se as colunas existem (independente de maiúsculas/minúsculas)
+    col_lat = next((col for col in df.columns if "lat" in col.lower()), None)
+    col_lon = next((col for col in df.columns if "long" in col.lower()), None)
+
+    if col_lat and col_lon:
         for index, row in df.iterrows():
             try:
-                lat = converter_coordenada(row['Latitude'])
-                lon = converter_coordenada(row['Longitude'])
+                lat = float(str(row[col_lat]).replace(",", "."))  # Garante formato decimal
+                lon = float(str(row[col_lon]).replace(",", "."))
                 coordinates.append((lat, lon))
             except ValueError:
-                continue  # Ignorar linhas com valores inválidos
+                continue  # Ignora linhas inválidas
+    else:
+        st.error("Colunas de latitude e longitude não foram encontradas no CSV.")
+    
     return coordinates
 
 # Função para criar arquivo KML
 def create_kml(coordinates):
     kml = simplekml.Kml()
     for lat, lon in coordinates:
-        kml.newpoint(coords=[(lon, lat)])
+        kml.newpoint(coords=[(lon, lat)])  # Mantém a ordem correta (lon, lat)
     return kml
 
 # Interface com Streamlit
